@@ -22,13 +22,53 @@
 #define REG_PART_ID     0xFF
 #define BYTES_PER_SAMPLE 3
 #define I2C_FREQ (400 * 1000)
+#define I2C_BYTE_TIMEOUT 50
+#define I2C_SWITCH_COUNT 10
+
+static void max30102_i2c_init(void){
+    i2c_init(I2C_PORT, I2C_FREQ);
+    gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(PIN_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(PIN_SDA);
+    gpio_pull_up(PIN_SCL);
+}
+
+
+max30102_status max30102_i2c_bus_recovery(void){
+    gpio_init(PIN_SDA);
+    gpio_init(PIN_SCL);
+
+    for (uint8_t i = 0; i < I2C_SWITCH_COUNT; i++){
+        gpio_set_dir(PIN_SCL, GPIO_OUT);
+        sleep_ms(5);
+        gpio_set_dir(PIN_SCL, GPIO_IN);
+        sleep_ms(5);
+    }
+    gpio_set_dir(PIN_SCL, GPIO_OUT);
+    sleep_ms(5);
+    if (gpio_get(PIN_SDA) == 1){
+        gpio_set_dir(PIN_SDA, GPIO_OUT);
+        sleep_ms(5);
+        gpio_set_dir(PIN_SCL, GPIO_IN);
+        sleep_ms(5);
+        gpio_set_dir(PIN_SDA, GPIO_IN);
+    }else{
+        max30102_i2c_init();
+        return MAX30102_RECOVERY_ERROR;
+    }
+
+    max30102_i2c_init();
+
+    return MAX30102_OK;
+}
+
 
 static max30102_status reg_write_read_check (int code, int len){
     switch (code){
         case (PICO_ERROR_GENERIC):
             return MAX30102_IS_NOT_CONNECTED;
         case (PICO_ERROR_TIMEOUT):
-            return REG_READ_WRITE_TIMEOUT;
+            return MAX30102_READ_WRITE_TIMEOUT;
         default:
             if (code == len){
                 return MAX30102_OK;
@@ -45,17 +85,20 @@ static max30102_status reg_write_read_check (int code, int len){
 static max30102_status reg_write(uint8_t reg, uint8_t val){
     uint8_t wr[2] = {reg, val};
     
-    int code = i2c_write_blocking(I2C_PORT, DEVICE_ID, wr, sizeof(wr), false);
-
     int wr_size = (int)sizeof(wr);
-    return reg_write_read_check(code, wr_size);
-   
+    uint timeout = (uint)((wr_size + 1) * I2C_BYTE_TIMEOUT);
+    int code = i2c_write_timeout_us(I2C_PORT, DEVICE_ID, wr, sizeof(wr), false, timeout);
+    max30102_status st = reg_write_read_check(code, wr_size);
+    return st;
 }
 
 static max30102_status reg_read(uint8_t reg, uint8_t *dst, uint8_t len){
-    int code1 = i2c_write_blocking(I2C_PORT, DEVICE_ID, &reg, 1, true);
+
+    uint timeout = (uint)(2 * I2C_BYTE_TIMEOUT);
+    int code1 = i2c_write_timeout_us(I2C_PORT, DEVICE_ID, &reg, 1, true, timeout);
     if (reg_write_read_check(code1, 1) == MAX30102_OK){
-        int code2 = i2c_read_blocking(I2C_PORT, DEVICE_ID, dst, len, false);
+        timeout = (uint)((len + 1) * I2C_BYTE_TIMEOUT);
+        int code2 = i2c_read_timeout_us(I2C_PORT, DEVICE_ID, dst, len, false, timeout);
         return reg_write_read_check(code2, len);
     }else{
         return reg_write_read_check(code1, 1);
@@ -63,14 +106,9 @@ static max30102_status reg_read(uint8_t reg, uint8_t *dst, uint8_t len){
 }
 
 
-
-
 max30102_status max30102_init(void){
-    i2c_init(I2C_PORT, I2C_FREQ);
-    gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(PIN_SCL, GPIO_FUNC_I2C);
-    gpio_pull_up(PIN_SDA);
-    gpio_pull_up(PIN_SCL);
+
+    max30102_i2c_init();
 
     max30102_status st = reg_write(REG_MODE_CFG, 0x40); // RESET всех регистров
     if(st != MAX30102_OK){ 
