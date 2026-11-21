@@ -106,8 +106,68 @@ static max30102_status reg_read(uint8_t reg, uint8_t *dst, uint8_t len){
 }
 
 
-max30102_status max30102_init(void){
+static max30102_status fifo_available(uint8_t *fifo_elem_num){
+    uint8_t buf[3];
+    max30102_status st = reg_read(REG_FIFO_WR, buf, 3);
+    if(st == MAX30102_OK){
+        uint8_t wr = buf[0];
+        uint8_t rd = buf[2];
+        *fifo_elem_num = ((wr & 0x1F) - (rd & 0x1F) + 32) % 32;
+        return st;
+    }else{
+        return st;
+    }
+}
 
+static max30102_status fifo_lost(uint8_t *fifo_lost_num){
+    uint8_t ovf = 0;
+    max30102_status st = reg_read(REG_OVF_CNT, &ovf, 1);
+    if(st == MAX30102_OK){
+        *fifo_lost_num = ovf & 0x1F;
+        return st;
+    }else{
+        return st;
+    }
+}
+
+
+
+
+static uint8_t fifo_elem_num = 0;
+max30102_status max30102_read(uint32_t *out){
+
+    uint8_t fifo_lost_num = 0;
+    if (fifo_elem_num == 0){
+        max30102_status st = fifo_available(&fifo_elem_num);
+        if (st != MAX30102_OK) return st;
+    }
+
+    if (fifo_elem_num != 0){
+        uint8_t buf[3] = {0};
+        uint8_t fifo_lost_num = 0;
+        max30102_status st = fifo_lost(&fifo_lost_num);
+        if (st == MAX30102_OK && fifo_lost_num == 0){
+            st = reg_read(REG_FIFO_DATA, buf, 3);
+            if (st == MAX30102_OK){
+                *out = ((uint32_t)(buf[0] & 0x03) << 16) | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2]); 
+                fifo_elem_num--;
+            }
+        }else{
+            if (st == MAX30102_OK){
+                return MAX30102_FIFO_DATA_LOST;
+            }else{
+                return st;
+            }
+        }
+        return st;
+    }else{
+        return MAX30102_FIFO_NO_DATA;
+    }
+}
+
+max30102_status max30102_init(void){
+    
+    fifo_elem_num = 0;
     max30102_i2c_init();
 
     max30102_status st = reg_write(REG_MODE_CFG, 0x40); // RESET всех регистров
@@ -148,40 +208,6 @@ max30102_status max30102_init(void){
     }
 }
 
-static max30102_status fifo_available(uint8_t *n){
-    uint8_t buf[3];
-    max30102_status st = reg_read(REG_FIFO_WR, buf, 3);
-    if(st == MAX30102_OK){
-        uint8_t wr = buf[0];
-        uint8_t ovf = buf[1];
-        uint8_t rd = buf[2];
-        *n = ((wr & 0x1F) - (rd & 0x1F) + 32) % 32;
-        return st;
-    }else{
-        return st;
-    }
-}
-
-
-max30102_status max30102_read(uint32_t *out){
-        static uint8_t n = 0;
-        if (n == 0){
-            max30102_status st = fifo_available(&n);
-            if (st != MAX30102_OK) return st;
-        }
-        if (n != 0){
-            uint8_t buf[3] = {0};
-
-            max30102_status st = reg_read(REG_FIFO_DATA, buf, 3);
-            if (st == MAX30102_OK){
-                *out = ((uint32_t)(buf[0] & 0x03) << 16) | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2]); 
-                n--;
-            }
-            return st;
-        }else{
-            return MAX30102_FIFO_NO_DATA;
-        }
-}
     
 
 

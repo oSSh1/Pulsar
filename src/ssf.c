@@ -24,12 +24,44 @@ struct detector{
     uint32_t last_peak_n;
 };
 
+static int32_t x[X_LENGTH] = {0};
+static int32_t s[WIN_LENGTH] = {0};
+static uint8_t x_count = 0;
+static uint8_t s_count = 0;
+static int32_t ssf = 0;
+static struct detector det = {0};
+
+void detector_reset(void){
+    for (uint16_t i = 0; i < X_LENGTH; i++){
+        x[i] = 0;
+    }
+    for (uint16_t i = 0; i < WIN_LENGTH; i++){
+        s[i] = 0;
+    }
+    x_count = 0;
+    s_count = 0;
+    ssf = 0;
+    det.spk = 0;
+    det.npk = 0;
+    det.ssf_prev = 0;
+    det.ssf_prev_prev = 0;
+    det.thr1 = 0;
+    det.thr2 = 0;
+    det.refr = 0;
+    det.contender_peak = 0;
+    det.contender_peak_n = 0;
+    for (uint16_t i = 0; i < 8; i++){
+        det.rr_buff[i] = 0;
+    }
+    det.rr_sum = 0;
+    det.rr_index = 0;
+    det.last_peak_n = 0;
+}
+
+
+
+
 int32_t get_ssf(int32_t value){
-    static int32_t x[X_LENGTH] = {0};
-    static int32_t s[WIN_LENGTH] = {0};
-    static uint8_t x_count = 0;
-    static uint8_t s_count = 0;
-    static int32_t ssf = 0;
     if (x_count < X_LENGTH){
         x[x_count] = value; 
         x_count++;
@@ -73,7 +105,6 @@ static void update_rr_buff(struct detector *det, uint32_t peak_n){
 
 int32_t peak_detector(int32_t ssf, uint32_t n){
     int32_t peak_n = 0;
-    static struct detector det = {0};
     if(n > BUFF_LENGTH){
         if(n > BUFF_LENGTH + WARMUP){
             det.thr1 = det.npk + ((det.spk - det.npk) / 4); 

@@ -17,12 +17,28 @@
 static int32_t rr[RR_WIN_LENGTH] = {0};
 static int32_t rr_index = 0;
 static bool ok[RR_WIN_LENGTH] = {false};
+static int32_t last_n = 0;
+static int32_t ref = 0;
+static int32_t bad_peaks = 0;
+
+
+void hrv_reset(void){
+    for (uint16_t i = 0; i < RR_WIN_LENGTH; i++){
+        rr[i] = 0;
+    }
+    for (uint16_t i = 0; i < RR_WIN_LENGTH; i++){
+        ok[i] = false;
+    }
+    rr_index = 0;
+    last_n = 0;
+    ref = 0;
+    bad_peaks = 0;
+
+}
+
 
 
 void hrv_add_peak(int32_t peak_n){
-    static int32_t last_n = 0;
-    static int32_t ref = 0;
-    static int32_t bad_peaks = 0;
     int32_t t = rr_index % RR_WIN_LENGTH;
     int32_t cur = (peak_n - last_n) * MS_MULTIPLIER;
     rr[t] = cur;

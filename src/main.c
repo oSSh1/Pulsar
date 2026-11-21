@@ -1,24 +1,31 @@
 #include <stdio.h>
 #include "pico/stdlib.h" 
+#include "pico/time.h"
 #include "max30102.h"
 #include "fir.h"
 #include "ssf.h"
 #include "hrv.h"
+#include "contact.h"
 #include <inttypes.h>
+#include <stdbool.h>
+
+#define MS_WITHOUT_DATA 20 
+
 
 static void sensor_bring_up(void){
     max30102_status st = max30102_init();
+    firwin_reset();
+    detector_reset();
+    hrv_reset();
+    contact_reset();
 
     while (st != MAX30102_OK){
-
-        if (max30102_i2c_bus_recovery() == MAX30102_OK){
-            st = max30102_init();
-            printf("%d\n", st);
-        }else{
-            printf("MAX30102_RECOVERY_ERROR\n");
-        }
-
         sleep_ms(1000);
+        st = max30102_i2c_bus_recovery();
+        if (st == MAX30102_OK){
+            st = max30102_init();
+        }
+        printf("%d\n", st); // Вывод ошибки
     }
 }
 
@@ -31,24 +38,51 @@ int main(void) {
 
     sensor_bring_up();
 
+
     uint32_t n = 0;
+    uint64_t last_ok_time = to_ms_64_since_boot(get_absolute_time());
+    bool cont_prev = false; 
+
     while (true) {
         uint32_t raw = 0;
         max30102_status st = max30102_read(&raw);
         if (st == MAX30102_OK){
-            int32_t value = firwin_value(raw);
-            int32_t ssf = get_ssf(-value);
-            int32_t peak_n = peak_detector(ssf, n);
-            if(peak_n != 0){
-                hrv_add_peak(peak_n);
-                int32_t hr = get_hr();
-                int32_t rmssd = get_rmssd();
-                printf("HR: %"PRId32", RMSSD: %"PRId32"\n", hr, rmssd);
+            bool cont = view_contact(raw);
+            last_ok_time = to_ms_64_since_boot(get_absolute_time());
+            if (cont && !cont_prev){
+                    firwin_reset();
+                    detector_reset();
+                    hrv_reset();
+                    n = 0;
             }
-            n++;
+            cont_prev = cont;
+            if (cont){
+                int32_t value = firwin_value(raw);
+                int32_t ssf = get_ssf(-value);
+                int32_t peak_n = peak_detector(ssf, n);
+                if(peak_n != 0){
+                    hrv_add_peak(peak_n);
+                    int32_t hr = get_hr();
+                    int32_t rmssd = get_rmssd();
+                    printf("HR: %"PRId32", RMSSD: %"PRId32"\n", hr, rmssd);
+                }
+                n++;
+            }
         }else{
-            if (st == MAX30102_READ_WRITE_TIMEOUT){
+            if (st != MAX30102_FIFO_NO_DATA){
+                printf("%d\n", st); // Вывод ошибки
+                n = 0;
                 sensor_bring_up();
+                last_ok_time = to_ms_64_since_boot(get_absolute_time());
+                cont_prev = false;
+            }else{
+                uint64_t now_ms = to_ms_64_since_boot(get_absolute_time());
+                if (now_ms - last_ok_time > MS_WITHOUT_DATA){
+                    n = 0;
+                    sensor_bring_up();
+                    last_ok_time = to_ms_64_since_boot(get_absolute_time());
+                    cont_prev - false;
+                }
             }
         }
         sleep_ms(5);

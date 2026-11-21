@@ -83,10 +83,10 @@ float h[BUFF_LENGTH] = {-7.476132965253294e-05, -0.0001191977741633136, -0.00016
 -0.0002323538707831667, -0.00021938331506200656, -0.00019468622361566636, -0.00016032582761523614, -0.0001191977741633136, 
 -7.476132965253294e-05};
 
+static uint32_t buff[BUFF_LENGTH] = {0};
+static uint16_t k = 0;
 
 int32_t firwin_value(uint32_t raw){
-    static uint32_t buff[BUFF_LENGTH] = {0};
-    static uint16_t k = 0;
     int32_t value = 0;
     if(k < BUFF_LENGTH){
         buff[k] = raw;
@@ -102,5 +102,12 @@ int32_t firwin_value(uint32_t raw){
         }
         return value;
     }
+}
+
+void firwin_reset(void){
+    for (uint16_t i = 0; i < BUFF_LENGTH; i++){
+        buff[i] = 0;
+    }
+    k = 0;
 }
 

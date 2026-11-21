@@ -16,6 +16,7 @@ add_executable(pulsar_onboard
     src/fir.c
     src/ssf.c
     src/hrv.c
+    src/contact.c
 )
 target_include_directories(pulsar_onboard PRIVATE include)
 target_link_libraries(pulsar_onboard pico_stdlib hardware_i2c)
