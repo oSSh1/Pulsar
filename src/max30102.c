@@ -136,7 +136,6 @@ static max30102_status fifo_lost(uint8_t *fifo_lost_num){
 static uint8_t fifo_elem_num = 0;
 max30102_status max30102_read(uint32_t *out){
 
-    uint8_t fifo_lost_num = 0;
     if (fifo_elem_num == 0){
         max30102_status st = fifo_available(&fifo_elem_num);
         if (st != MAX30102_OK) return st;

@@ -10,6 +10,7 @@
 #include <stdbool.h>
 
 #define MS_WITHOUT_DATA 20 
+#define LED_ON_TIME_MS 100
 
 
 static void sensor_bring_up(void){
@@ -29,6 +30,24 @@ static void sensor_bring_up(void){
     }
 }
 
+static void led_on(void){
+    gpio_put(PICO_DEFAULT_LED_PIN, 1);
+}
+
+static void led_off(void){
+    gpio_put(PICO_DEFAULT_LED_PIN, 0);
+}
+
+
+
+static int64_t led_callback_off(alarm_id_t id, void *user_data){
+    (void)id; 
+    (void)user_data;
+    gpio_put(PICO_DEFAULT_LED_PIN, 0);
+
+    return 0;
+}
+
 
 /* --- основной цикл ---------------------------------------------------- */
  
@@ -37,6 +56,9 @@ int main(void) {
     sleep_ms(3000);                         /* дать USB подняться */
 
     sensor_bring_up();
+
+    gpio_init(PICO_DEFAULT_LED_PIN);        /* светодиод для мигания на удары */
+    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 
 
     uint32_t n = 0;
@@ -61,6 +83,11 @@ int main(void) {
                 int32_t ssf = get_ssf(-value);
                 int32_t peak_n = peak_detector(ssf, n);
                 if(peak_n != 0){
+
+                    led_on();
+                    if(add_alarm_in_ms(LED_ON_TIME_MS, led_callback_off, NULL, true) < 0) 
+                        led_off();
+
                     hrv_add_peak(peak_n);
                     int32_t hr = get_hr();
                     int32_t rmssd = get_rmssd();
@@ -81,7 +108,7 @@ int main(void) {
                     n = 0;
                     sensor_bring_up();
                     last_ok_time = to_ms_64_since_boot(get_absolute_time());
-                    cont_prev - false;
+                    cont_prev = false;
                 }
             }
         }
