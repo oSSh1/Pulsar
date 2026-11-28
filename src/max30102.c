@@ -4,27 +4,6 @@
 #include "hardware/gpio.h"
 #include "max30102.h"
 
-#define DEVICE_ID   0x57
-#define PART_ID 0x15
-#define I2C_PORT    i2c1
-#define PIN_SDA     18
-#define PIN_SCL     19
-#define PIN_INT     15
-#define REG_INT_ST1     0x00
-#define REG_FIFO_WR     0x04
-#define REG_OVF_CNT     0x05
-#define REG_FIFO_RD     0x06
-#define REG_FIFO_DATA   0x07
-#define REG_FIFO_CFG    0x08
-#define REG_MODE_CFG    0x09
-#define REG_SPO2_CFG    0x0A
-#define REG_LED1_PA     0x0C
-#define REG_PART_ID     0xFF
-#define BYTES_PER_SAMPLE 3
-#define I2C_FREQ (400 * 1000)
-#define I2C_BYTE_TIMEOUT 50
-#define I2C_SWITCH_COUNT 10
-
 static void max30102_i2c_init(void){
     i2c_init(I2C_PORT, I2C_FREQ);
     gpio_set_function(PIN_SDA, GPIO_FUNC_I2C);
@@ -92,7 +71,7 @@ static max30102_status reg_write(uint8_t reg, uint8_t val){
     return st;
 }
 
-static max30102_status reg_read(uint8_t reg, uint8_t *dst, uint8_t len){
+max30102_status reg_read(uint8_t reg, uint8_t *dst, uint8_t len){
 
     uint timeout = (uint)(2 * I2C_BYTE_TIMEOUT);
     int code1 = i2c_write_timeout_us(I2C_PORT, DEVICE_ID, &reg, 1, true, timeout);
@@ -176,8 +155,23 @@ max30102_status max30102_init(void){
     sleep_ms(100);
 
 
+
+
     st = reg_write(REG_FIFO_CFG, 0x50); // Усреднение по 4 отчета
                                         // При переполнении перезаписывать старые
+    if (st != MAX30102_OK){
+        return st;
+    }
+
+    uint8_t b;
+    st = reg_read(0x00, &b, 1);         // Сброс пина int, тк в регистре 0x00 pwr_rdy = 1 после включения и int притягивается к 0
+    if (st != MAX30102_OK){            
+        return st;
+    }
+
+
+    st = reg_write(REG_INT_EN1, 0x40); // Прерывание по приходу отсчета
+                                        
     if (st != MAX30102_OK){
         return st;
     }
